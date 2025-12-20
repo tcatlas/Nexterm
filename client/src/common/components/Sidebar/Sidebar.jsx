@@ -47,7 +47,7 @@ export const Sidebar = () => {
                 <div className="sidebar-top">
                     <Tooltip text={t('common.sidebar.collapseTitle')} disabled={isCollapsed}>
                         <div className="sidebar-logo" onClick={() => setIsCollapsed(!isCollapsed)} title={t('common.sidebar.collapseTitle')}>
-                            <NextermLogo size={64} />
+                            <NextermLogo size={48} />
                         </div>
                     </Tooltip>
                     <hr />

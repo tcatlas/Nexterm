@@ -1,7 +1,7 @@
 @use "@/common/styles/colors"
 
 .sidebar
-  width: 5rem
+  width: 3.5rem
   user-select: none
   background-color: colors.$lighter-background
   height: 100%
@@ -16,7 +16,7 @@
   z-index: 10
 
   &.collapsed
-    margin-left: -5rem
+    margin-left: -3.5rem
     position: absolute
 
     &:hover
@@ -32,8 +32,8 @@
 
   .sidebar-logo
     margin-top: 0.5rem
-    width: 3.5rem
-    height: 3.5rem
+    width: 2.5rem
+    height: 2.5rem
     cursor: pointer
     display: flex
     justify-content: center
@@ -62,8 +62,8 @@
       display: none
 
     .nav-item
-      width: 3.75rem
-      height: 3.75rem
+      width: 2.5rem
+      height: 2.5rem
       flex-shrink: 0
       display: flex
       justify-content: center
@@ -75,8 +75,8 @@
       cursor: pointer
 
       svg
-        width: 2.5rem
-        height: 2.5rem
+        width: 1.5rem
+        height: 1.5rem
 
       &:hover:not(.nav-item-disabled)
         color: colors.$primary
@@ -112,8 +112,8 @@
       cursor: pointer
 
       svg
-        width: 2rem
-        height: 2rem
+        width: 1rem
+        height: 1rem
 
       &:hover
         color: colors.$error
