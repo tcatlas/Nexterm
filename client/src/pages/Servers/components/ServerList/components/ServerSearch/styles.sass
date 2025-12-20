@@ -1,5 +1,7 @@
 @use "@/common/styles/colors"
 
+$search-control-height: 2.6rem
+
 .server-search
   position: relative
   flex: 1
@@ -46,15 +48,18 @@
 
 .search-input
   user-select: none
+  height: $search-control-height
+  box-sizing: border-box
+  line-height: normal
   padding: 0.5rem 3rem 0.5rem 2rem
   border: 1px solid colors.$gray
   background-color: colors.$lighter-background
   color: colors.$white
-  box-sizing: border-box
   border-radius: 0.7rem
   font-size: 1rem
   width: 100%
   outline: none
+  -webkit-appearance: none
 
   @container (max-width: 180px)
     padding-right: 1rem

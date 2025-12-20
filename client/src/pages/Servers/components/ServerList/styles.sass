@@ -1,5 +1,7 @@
 @use "@/common/styles/colors"
 
+$search-control-height: 2.6rem
+
 .server-list
   background-color: colors.$lighter-background
   height: 100%
@@ -30,14 +32,17 @@
       margin-top: 1rem
       display: flex
       gap: 0.5rem
-      align-items: flex-start
+      align-items: center
       position: relative
 
       .tag-filter-button
         display: flex
         align-items: center
         justify-content: center
-        padding: 0.35rem
+        width: $search-control-height
+        height: $search-control-height
+        box-sizing: border-box
+        padding: 0
         border-radius: 0.7rem
         border: 1px solid colors.$gray
         background-color: colors.$lighter-background
@@ -47,9 +52,10 @@
         position: relative
         flex-shrink: 0
 
+
         svg
-          width: 1.4rem
-          height: 1.4rem
+          width: 1.25rem
+          height: 1.25rem
 
         .tag-count
           position: absolute
@@ -133,5 +139,6 @@
 
     &:hover
       background-color: colors.$primary
+
   .is-resizing
     background-color: colors.$primary
