@@ -11,6 +11,7 @@ const { createAuditLog, AUDIT_ACTIONS, RESOURCE_TYPES } = require("./audit");
 const stateBroadcaster = require("../lib/StateBroadcaster");
 const logger = require("../utils/logger");
 const SessionManager = require("../lib/SessionManager");
+const { getFolderInheritance } = require("../utils/folderInheritance");
 
 const cleanupOrganizationIdentities = async (entryIds, oldOrganizationId) => {
     if (!entryIds.length || !oldOrganizationId) return;
@@ -112,6 +113,7 @@ module.exports.createFolder = async (accountId, configuration) => {
         accountId: configuration.organizationId ? null : accountId,
         organizationId: configuration.organizationId || null,
         parentId: configuration.parentId,
+        config: configuration.config || null,
     });
 
     await createAuditLog({
@@ -369,7 +371,7 @@ module.exports.listFolders = async (accountId) => {
     return result;
 };
 
-module.exports.getFolderById = async (accountId, folderId) => {
+module.exports.getFolderById = async (accountId, folderId, protocol = null) => {
     const folder = await Folder.findByPk(folderId);
 
     if (!folder) {
@@ -385,5 +387,25 @@ module.exports.getFolderById = async (accountId, folderId) => {
         }
     }
 
-    return folder;
+    const inheritance = await getFolderInheritance(folder.id, protocol);
+    const parentInheritance = folder.parentId
+        ? await getFolderInheritance(folder.parentId, protocol)
+        : { config: {}, identities: [], profiles: {}, identityProfiles: {} };
+    const allInheritance = await getFolderInheritance(folder.id);
+    const allParentInheritance = folder.parentId
+        ? await getFolderInheritance(folder.parentId)
+        : { profiles: {}, identityProfiles: {} };
+
+    return {
+        ...folder,
+        rawConfig: folder.config || {},
+        config: inheritance.config,
+        inheritedConfig: parentInheritance.config,
+        identities: inheritance.identities,
+        inheritedIdentities: parentInheritance.identities,
+        profiles: allInheritance.profiles,
+        inheritedProfiles: allParentInheritance.profiles,
+        identityProfiles: allInheritance.identityProfiles,
+        inheritedIdentityProfiles: allParentInheritance.identityProfiles,
+    };
 };

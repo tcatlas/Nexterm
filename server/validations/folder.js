@@ -3,11 +3,13 @@ const Joi = require('joi');
 module.exports.folderCreationValidation = Joi.object({
     name: Joi.string().min(1).max(50).required(),
     parentId: Joi.number().integer().allow(null).optional(),
-    organizationId: Joi.number().integer().allow(null).optional()
+    organizationId: Joi.number().integer().allow(null).optional(),
+    config: Joi.object().unknown(true).optional()
 });
 
 module.exports.folderEditValidation = Joi.object({
     name: Joi.string().min(1).max(50),
     parentId: Joi.number().integer().allow(null).optional(),
-    organizationId: Joi.number().integer().allow(null).optional()
+    organizationId: Joi.number().integer().allow(null).optional(),
+    config: Joi.object().unknown(true).optional()
 }).min(1);

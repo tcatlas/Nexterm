@@ -4,6 +4,7 @@ const { getIdentityCredentials } = require("./identity");
 const { buildSSHParams, resolveJumpHosts } = require("../lib/ConnectionService");
 const { validateEntryAccess } = require("./entry");
 const controlPlane = require("../lib/controlPlane/ControlPlaneServer");
+const { getEffectiveEntryConfig } = require("../utils/folderInheritance");
 
 const execCommand = async (accountId, entryId, identityId, command) => {
     const entry = await Entry.findByPk(entryId);
@@ -16,7 +17,8 @@ const execCommand = async (accountId, entryId, identityId, command) => {
         return { code: 403, message: "Access denied" };
     }
 
-    if (entry.config?.protocol !== "ssh") {
+    const effectiveConfig = await getEffectiveEntryConfig(entry);
+    if (effectiveConfig.protocol !== "ssh") {
         return { code: 400, message: "Command execution is only supported for SSH entries" };
     }
 
@@ -34,6 +36,8 @@ const execCommand = async (accountId, entryId, identityId, command) => {
     if (!identity || !identity.id) {
         return { code: 400, message: "No identity available for this entry" };
     }
+
+    entry.config = effectiveConfig;
 
     const credentials = await getIdentityCredentials(identity.id);
     const params = buildSSHParams(identity, credentials);

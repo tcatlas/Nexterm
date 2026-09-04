@@ -1,11 +1,12 @@
 const Identity = require('../models/Identity');
-const EntryIdentity = require('../models/EntryIdentity');
-const { listIdentities } = require('../controllers/identity');
+const { listIdentities } = require("../controllers/identity");
+const { getEffectiveEntryConfig, getEntryIdentityIds } = require("./folderInheritance");
 
 const CREDENTIALLESS_PROTOCOLS = ['telnet', 'demo'];
 
 const resolveIdentity = async (entry, identityId, directIdentity = null, accountId = null) => {
-    const protocol = entry.type === 'server' ? entry.config?.protocol : entry.type;
+    const config = await getEffectiveEntryConfig(entry);
+    const protocol = entry.type === "server" ? config.protocol : entry.type;
     const requiresIdentity = !entry.type?.startsWith('pve-') && !CREDENTIALLESS_PROTOCOLS.includes(protocol);
 
     if (directIdentity) {
@@ -34,14 +35,11 @@ const resolveIdentity = async (entry, identityId, directIdentity = null, account
         return identity;
     }
 
-    const entryIdentities = await EntryIdentity.findAll({
-        where: { entryId: entry.id },
-        order: [['isDefault', 'DESC']]
-    });
+    const entryIdentityIds = await getEntryIdentityIds(entry);
 
-    for (const ei of entryIdentities) {
-        if (accessibleIds && !accessibleIds.has(ei.identityId)) continue;
-        const identity = await Identity.findByPk(ei.identityId);
+    for (const entryIdentityId of entryIdentityIds) {
+        if (accessibleIds && !accessibleIds.has(entryIdentityId)) continue;
+        const identity = await Identity.findByPk(entryIdentityId);
         if (identity) return identity;
     }
 

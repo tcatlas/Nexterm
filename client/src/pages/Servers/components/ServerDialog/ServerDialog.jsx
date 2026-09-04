@@ -33,6 +33,8 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
     const [icon, setIcon] = useState(null);
     const [identities, setIdentities] = useState([]);
     const [config, setConfig] = useState({});
+    const [inheritedConfig, setInheritedConfig] = useState({});
+    const [inheritedIdentities, setInheritedIdentities] = useState([]);
     const [monitoringEnabled, setMonitoringEnabled] = useState(false);
     const [entryType, setEntryType] = useState("server");
 
@@ -40,10 +42,11 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
 
     const [activeTab, setActiveTab] = useState(0);
     
-    const initialValues = useRef({ name: '', icon: null, config: {}, monitoringEnabled: false });
+    const initialValues = useRef({ name: '', icon: null, config: {}, identities: '[]', monitoringEnabled: false });
 
     const fieldConfig = getFieldConfig(entryType, config.protocol);
     const tabs = getAvailableTabs(entryType, config.protocol);
+    const overrides = useMemo(() => Object.keys(config).filter((key) => key !== "protocol" && JSON.stringify(config[key]) !== JSON.stringify(inheritedConfig[key])), [config, inheritedConfig]);
 
     const normalizeIdentity = (identity) => {
         const normalized = { ...identity };
@@ -152,6 +155,23 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
         return finalConfig;
     };
 
+    const resetOverride = useCallback((key) => {
+        const value = inheritedConfig[key];
+        setConfig((current) => {
+            const next = { ...current };
+            if (Object.hasOwn(inheritedConfig, key)) next[key] = value;
+            else delete next[key];
+            return next;
+        });
+        if (key === "monitoringEnabled") setMonitoringEnabled(Boolean(value ?? true));
+    }, [inheritedConfig]);
+
+    const buildLocalConfig = () => Object.fromEntries(
+        Object.entries(buildConfig()).filter(([key, value]) => key === "protocol" || JSON.stringify(value) !== JSON.stringify(inheritedConfig[key]))
+    );
+
+    const serverIdentities = useMemo(() => [...identities, ...inheritedIdentities.filter((identityId) => !identities.includes(identityId))], [identities, inheritedIdentities]);
+
     const createServer = async () => {
         try {
             const serverIdentityIds = await updateIdentities();
@@ -162,7 +182,7 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
             const result = await putRequest("entries", {
                 name,
                 icon,
-                config: buildConfig(),
+                config: buildLocalConfig(),
                 folderId: currentFolderId,
                 organizationId: currentOrganizationId,
                 identities: serverIdentityIds,
@@ -187,8 +207,8 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
 
             await patchRequest("entries/" + editServerId, {
                 name, icon,
-                config: buildConfig(),
-                identities: serverIdentityIds
+                config: buildLocalConfig(),
+                identities: serverIdentityIds,
             });
 
             loadServers();
@@ -215,16 +235,19 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
             getRequest("entries/" + editServerId).then((server) => {
                 setName(server.name);
                 setIcon(server.icon || null);
-                setIdentities(server.identities);
+                setIdentities(server.localIdentities || []);
                 setEntryType(server.type || "server");
 
                 const parsedConfig = server.config || {};
                 setConfig(parsedConfig);
+                setInheritedConfig(server.inheritedConfig || {});
+                setInheritedIdentities(server.inheritedIdentities || []);
                 setMonitoringEnabled(Boolean(parsedConfig.monitoringEnabled ?? true));
                 initialValues.current = {
                     name: server.name,
                     icon: server.icon || null,
                     config: JSON.stringify(parsedConfig),
+                    identities: JSON.stringify(server.localIdentities || []),
                     monitoringEnabled: Boolean(parsedConfig.monitoringEnabled ?? true)
                 };
             });
@@ -233,6 +256,8 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
             setIcon(null);
             setIdentities([]);
             setEntryType("server");
+            setInheritedConfig({});
+            setInheritedIdentities([]);
             
             if (initialProtocol) {
                 const portMap = { ssh: "22", telnet: "23", rdp: "3389", vnc: "5900", sftp: "22", ftp: "21", ftps: "21" };
@@ -249,18 +274,37 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
                     name: '', 
                     icon: defaultIcon, 
                     config: JSON.stringify(initialConfig), 
+                    identities: '[]',
                     monitoringEnabled: false 
                 };
             } else {
                 setConfig({});
-                initialValues.current = { name: '', icon: null, config: '{}', monitoringEnabled: false };
+                initialValues.current = { name: '', icon: null, config: '{}', identities: '[]', monitoringEnabled: false };
             }
             setMonitoringEnabled(false);
+
+            if (currentFolderId) {
+                getRequest("folders/" + currentFolderId + "?protocol=" + (initialProtocol || "")).then((folder) => {
+                    const inherited = folder.config || {};
+                    setConfig((current) => {
+                        const next = { ...inherited, ...current };
+                        initialValues.current = {
+                            ...initialValues.current,
+                            config: JSON.stringify(next),
+                            identities: '[]',
+                        };
+                        return next;
+                    });
+                    setIdentities([]);
+                    setInheritedConfig(inherited);
+                    setInheritedIdentities(folder.identities || []);
+                });
+            }
         }
 
         setIdentityUpdates({});
         setActiveTab(0);
-    }, [open, editServerId, initialProtocol, fieldConfig.showIpPort]);
+    }, [open, editServerId, initialProtocol, currentFolderId, fieldConfig.showIpPort]);
 
     useEffect(() => {
         if (!open) return;
@@ -286,6 +330,7 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
     const isDirty = name !== initialValues.current.name || 
                      icon !== initialValues.current.icon ||
                      JSON.stringify(config) !== initialValues.current.config ||
+                     JSON.stringify(identities) !== initialValues.current.identities ||
                      monitoringEnabled !== initialValues.current.monitoringEnabled ||
                      Object.keys(identityUpdates).length > 0;
 
@@ -339,16 +384,16 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
                     {activeTab === 0 && <DetailsPage name={name} setName={setName}
                                                      icon={icon} setIcon={setIcon}
                                                      config={config} setConfig={setConfig}
-                                                     fieldConfig={fieldConfig} />}
+                                                     fieldConfig={fieldConfig} overrides={overrides} onReset={resetOverride} inheritedConfig={inheritedConfig} />}
                     {activeTab === 1 && tabs[1]?.key === "identities" &&
-                        <IdentityPage serverIdentities={identities} setIdentityUpdates={setIdentityUpdates}
+                        <IdentityPage setIdentityUpdates={setIdentityUpdates}
                                       identityUpdates={identityUpdates} setIdentities={setIdentities}
                                       currentOrganizationId={currentOrganizationId} allowedAuthTypes={fieldConfig.allowedAuthTypes}
-                                      serverName={name} />}
+                                      serverName={name} specificIdentities={identities} serverIdentities={serverIdentities} />}
                     {tabs.find((tab, idx) => idx === activeTab && tab.key === "settings") && 
                         <SettingsPage config={config} setConfig={setConfig}
                                       monitoringEnabled={monitoringEnabled} setMonitoringEnabled={setMonitoringEnabled}
-                                      fieldConfig={fieldConfig} editServerId={editServerId} />}
+                                      fieldConfig={fieldConfig} editServerId={editServerId} overrides={overrides} onReset={resetOverride} inheritedConfig={inheritedConfig} />}
                 </form>
 
                 <Button className="server-dialog-button" onClick={handleSubmit}

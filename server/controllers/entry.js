@@ -16,6 +16,7 @@ const logger = require("../utils/logger");
 const { sendWakeOnLan } = require("../utils/wol");
 const stateBroadcaster = require("../lib/StateBroadcaster");
 const SessionManager = require("../lib/SessionManager");
+const { withoutInheritance, getFolderInheritance, getEffectiveEntryConfig, getEntryIdentityIds } = require("../utils/folderInheritance");
 
 const PROTOCOL_RENDERERS = {
     ssh: "terminal",
@@ -115,8 +116,11 @@ module.exports.createEntry = async (accountId, configuration) => {
         configuration.icon = "server";
     }
 
-    if (!configuration.renderer && configuration.config?.protocol) {
-        configuration.renderer = PROTOCOL_RENDERERS[configuration.config.protocol] ?? configuration.renderer;
+    const inheritedConfig = configuration.folderId ? await getFolderInheritance(configuration.folderId) : { config: {} };
+    const effectiveConfig = { ...inheritedConfig.config, ...withoutInheritance(configuration.config) };
+
+    if (!configuration.renderer && effectiveConfig.protocol) {
+        configuration.renderer = PROTOCOL_RENDERERS[effectiveConfig.protocol] ?? configuration.renderer;
     }
 
     if (configuration.identities && configuration.identities.length > 0) {
@@ -274,17 +278,27 @@ module.exports.getEntry = async (accountId, entryId) => {
 
     if (!accessCheck.valid) return accessCheck;
 
-    const identities = await EntryIdentity.findAll({ where: { entryId }, order: [['isDefault', 'DESC']] });
-
     const accessibleIdentities = await listIdentities(accountId);
     const accessibleIdentityIds = new Set(accessibleIdentities.map(i => i.id));
-    const filteredIdentityIds = identities
-        .map(ei => ei.identityId)
-        .filter(id => accessibleIdentityIds.has(id));
+    const directIdentities = await EntryIdentity.findAll({
+        where: { entryId },
+        order: [["isDefault", "DESC"]],
+    });
+    const directIdentityIds = directIdentities.map((identity) => identity.identityId);
+    const identityIds = await getEntryIdentityIds(entry);
+    const filteredIdentityIds = identityIds.filter(id => accessibleIdentityIds.has(id));
+    const inherited = entry.folderId
+        ? await getFolderInheritance(entry.folderId, withoutInheritance(entry.config).protocol)
+        : { config: {}, identities: [] };
 
     return {
         ...entry,
-        identities: filteredIdentityIds
+        config: await getEffectiveEntryConfig(entry),
+        localConfig: withoutInheritance(entry.config),
+        inheritedConfig: inherited.config,
+        identities: filteredIdentityIds,
+        localIdentities: directIdentityIds.filter(id => accessibleIdentityIds.has(id)),
+        inheritedIdentities: inherited.identities,
     };
 };
 
@@ -314,11 +328,6 @@ module.exports.listEntries = async (accountId) => {
     });
 
     const entryIds = entries.map(e => e.id);
-    const allEntryIdentities = await EntryIdentity.findAll({
-        where: { entryId: { [Op.in]: entryIds } },
-        order: [['isDefault', 'DESC']]
-    });
-
     const allEntryTags = await EntryTag.findAll({
         where: { entryId: { [Op.in]: entryIds } }
     });
@@ -329,16 +338,6 @@ module.exports.listEntries = async (accountId) => {
 
     const accessibleIdentities = await listIdentities(accountId);
     const accessibleIdentityIds = new Set(accessibleIdentities.map(i => i.id));
-
-    const identitiesMap = new Map();
-    allEntryIdentities.forEach(ei => {
-        if (!accessibleIdentityIds.has(ei.identityId)) return;
-        
-        if (!identitiesMap.has(ei.entryId)) {
-            identitiesMap.set(ei.entryId, []);
-        }
-        identitiesMap.get(ei.entryId).push(ei.identityId);
-    });
 
     const tagsMap = new Map();
     allEntryTags.forEach(et => {
@@ -367,7 +366,7 @@ module.exports.listEntries = async (accountId) => {
     };
     rebuildFolderMap(folders);
 
-    const buildEntryObject = (entry, identities, tags) => {
+    const buildEntryObject = (entry, config, identities, tags) => {
         const obj = {
             type: entry.type,
             id: entry.id,
@@ -383,12 +382,12 @@ module.exports.listEntries = async (accountId) => {
             return {
                 ...obj,
                 identities: identities,
-                protocol: entry.config?.protocol,
-                ip: entry.config?.ip,
-                macAddress: entry.config?.macAddress,
-                wakeOnLanEnabled: entry.config?.wakeOnLanEnabled,
-                notes: entry.config?.notes || "",
-                showNoteInList: Boolean(entry.config?.showNoteInList),
+                protocol: config?.protocol,
+                ip: config?.ip,
+                macAddress: config?.macAddress,
+                wakeOnLanEnabled: config?.wakeOnLanEnabled,
+                notes: config?.notes || "",
+                showNoteInList: Boolean(config?.showNoteInList),
             };
         }
 
@@ -400,9 +399,9 @@ module.exports.listEntries = async (accountId) => {
     };
 
     for (const entry of entries) {
-        const identities = identitiesMap.get(entry.id) || [];
+        const identities = (await getEntryIdentityIds(entry)).filter((id) => accessibleIdentityIds.has(id));
         const tags = tagsMap.get(entry.id) || [];
-        const entryObject = buildEntryObject(entry, identities, tags);
+        const entryObject = buildEntryObject(entry, await getEffectiveEntryConfig(entry), identities, tags);
 
         if (!entryObject) continue;
 

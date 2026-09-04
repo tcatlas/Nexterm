@@ -12,6 +12,7 @@ const { Permission } = require("../permissions/registry");
 const Organization = require('../models/Organization');
 const logger = require("../utils/logger");
 const stateBroadcaster = require("../lib/StateBroadcaster");
+const { getEffectiveEntryConfig } = require("../utils/folderInheritance");
 
 const ENTRY_TYPE_TO_AUDIT_ACTION = {
     'ssh': AUDIT_ACTIONS.SSH_CONNECT,
@@ -63,8 +64,9 @@ const createSession = async (accountId, entryId, identityId, connectionReason, t
     if (!entry) {
         return { code: 404, message: "Entry not found" };
     }
+    const effectiveEntry = { ...entry, config: await getEffectiveEntryConfig(entry) };
 
-    const requiredPermission = getRequiredConnectPermission(entry, type, scriptId);
+    const requiredPermission = getRequiredConnectPermission(effectiveEntry, type, scriptId);
     const accessResult = await validateEntryAccess(accountId, entry, "Access denied", requiredPermission);
     if (!accessResult.valid) {
         return { code: 403, message: "Access denied" };
@@ -95,7 +97,7 @@ const createSession = async (accountId, entryId, identityId, connectionReason, t
     const auditLogId = await createAuditLog({
         accountId,
         organizationId: entry.organizationId,
-        action: getAuditAction(entry, type, scriptId),
+        action: getAuditAction(effectiveEntry, type, scriptId),
         resource: scriptId ? RESOURCE_TYPES.SCRIPT : RESOURCE_TYPES.ENTRY,
         resourceId: scriptId || entry.id,
         details: { connectionReason, ...(scriptId && { serverId: entry.id }) },

@@ -15,6 +15,7 @@ const controlPlane = require("./controlPlane/ControlPlaneServer");
 const { isRecordingEnabled } = require("../utils/recordingService");
 const EngineSftpClient = require("./EngineSftpClient");
 const { buildPveQemuParams, buildRdpParams, buildVncParams, buildWebParams, buildDemoParams } = require("./guacParamBuilders");
+const { getEffectiveEntryConfig } = require("../utils/folderInheritance");
 
 const GUAC_PROTOCOLS = {
     rdp: { sessionType: SessionType.RDP, defaultPort: 3389 },
@@ -70,11 +71,12 @@ const resolveJumpHosts = async (entry) => {
     for (const jumpHostId of jumpHostIds) {
         const jhEntry = await Entry.findByPk(jumpHostId);
         if (!jhEntry) throw new Error(`Jump host entry ${jumpHostId} not found`);
-
-        const { host, port } = getHostPort(jhEntry);
         const identityResult = await resolveIdentity(jhEntry, null, null, null);
         const identity = extractIdentity(identityResult);
         if (!identity) throw new Error(`No identity found for jump host ${jumpHostId}`);
+        jhEntry.config = await getEffectiveEntryConfig(jhEntry);
+
+        const { host, port } = getHostPort(jhEntry);
 
         const credentials = await resolveCredentials(identity);
         jumpHosts.push({
@@ -110,6 +112,7 @@ const createConnectionForSession = async (sessionId, accountId) => {
 
     const identityResult = await resolveIdentity(entry, identityId, directIdentity, accountId);
     const identity = extractIdentity(identityResult);
+    entry.config = await getEffectiveEntryConfig(entry);
     const organizationId = entry.organizationId || null;
     const protocol = getEntryProtocol(entry);
 

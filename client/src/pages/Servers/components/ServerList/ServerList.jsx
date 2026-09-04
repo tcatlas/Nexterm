@@ -43,6 +43,7 @@ import {
     mdiTunnel,
     mdiWeb,
     mdiNoteEditOutline,
+    mdiContentDuplicate,
 } from "@mdi/js";
 import { ContextMenu, ContextMenuItem, ContextMenuSeparator, useContextMenu } from "@/common/components/ContextMenu";
 import { useDrop, useDragLayer } from "react-dnd";
@@ -56,6 +57,7 @@ import { useToast } from "@/common/contexts/ToastContext.jsx";
 import ActionConfirmDialog from "@/common/components/ActionConfirmDialog";
 import { UserContext } from "@/common/contexts/UserContext.jsx";
 import { Permission } from "@/common/utils/permissions.js";
+import FolderInheritanceDialog from "@/pages/Servers/components/FolderInheritanceDialog/FolderInheritanceDialog.jsx";
 
 const flattenEntries = (entries, path = []) => entries.flatMap(entry =>
     entry.type === "folder" || entry.type === "organization"
@@ -144,6 +146,7 @@ export const ServerList = ({
     const [scriptsMenuServer, setScriptsMenuServer] = useState(null);
     const [isMobile, setIsMobile] = useState(false);
     const [deleteConfirmDialog, setDeleteConfirmDialog] = useState({ open: false, name: "", id: null, isFolder: false });
+    const [inheritanceFolderId, setInheritanceFolderId] = useState(null);
 
     const contextMenu = useContextMenu();
 
@@ -722,12 +725,17 @@ export const ServerList = ({
                                         <ContextMenuSeparator />
                                     </>
                                 )}
-                                <ContextMenuItem
-                                    icon={mdiFormTextbox}
-                                    label={t("servers.contextMenu.renameFolder")}
-                                    onClick={() => setRenameStateId(contextClickedId)}
-                                />
-                                <ContextMenuSeparator />
+                                        <ContextMenuItem
+                                            icon={mdiFormTextbox}
+                                            label={t("servers.contextMenu.renameFolder")}
+                                            onClick={() => setRenameStateId(contextClickedId)}
+                                        />
+                                        <ContextMenuItem
+                                            icon={mdiContentDuplicate}
+                                            label={t("servers.contextMenu.inheritanceSettings", "Inheritance settings")}
+                                            onClick={() => setInheritanceFolderId(contextClickedId)}
+                                        />
+                                        <ContextMenuSeparator />
                                 <ContextMenuItem
                                     icon={mdiFolderRemove}
                                     label={t("servers.contextMenu.deleteFolder")}
@@ -1025,6 +1033,13 @@ export const ServerList = ({
                         setOpen={(open) => setDeleteConfirmDialog(prev => ({ ...prev, open }))}
                         onConfirm={handleDeleteConfirm}
                         text={t("servers.contextMenu.deleteConfirm", { name: deleteConfirmDialog.name })}
+                    />
+
+                    <FolderInheritanceDialog
+                        open={Boolean(inheritanceFolderId)}
+                        onClose={() => setInheritanceFolderId(null)}
+                        folderId={inheritanceFolderId}
+                        organizationId={contextFolder?.organizationId || null}
                     />
 
                     <ScriptsMenu
