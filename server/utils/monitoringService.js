@@ -53,7 +53,11 @@ const runMonitoring = async () => {
 
 const monitorEntry = async (entry, config) => {
     try {
-        const identityIds = await getEntryIdentityIds(entry);
+        const identityIds = await getEntryIdentityIds(entry, {
+            sharedOnly: true,
+            organizationId: entry.organizationId,
+            ownerAccountId: entry.accountId,
+        });
         if (!identityIds.length) return saveMonitoringData(entry.id, { status: "error", errorMessage: "No identities configured" });
 
         const identities = await Identity.findAll({ where: { id: identityIds } });
@@ -107,7 +111,11 @@ const collectServerData = async (entry, identity, credentials) => {
     }
 
     const params = buildSSHParams(identity, credentials);
-    const jumpHosts = await resolveJumpHosts(entry);
+    const jumpHosts = await resolveJumpHosts(entry, null, {
+        sharedOnly: true,
+        organizationId: entry.organizationId,
+        ownerAccountId: entry.accountId,
+    });
 
     try {
         const commands = Object.entries(COMMANDS).map(([id, command]) => ({ id, command }));

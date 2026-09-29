@@ -4,7 +4,7 @@ const { getIdentityCredentials } = require("./identity");
 const { buildSSHParams, resolveJumpHosts } = require("../lib/ConnectionService");
 const { validateEntryAccess } = require("./entry");
 const controlPlane = require("../lib/controlPlane/ControlPlaneServer");
-const { getEffectiveEntryConfig } = require("../utils/folderInheritance");
+const { applyEffectiveEntryConfig } = require("../utils/folderInheritance");
 
 const execCommand = async (accountId, entryId, identityId, command) => {
     const entry = await Entry.findByPk(entryId);
@@ -17,7 +17,7 @@ const execCommand = async (accountId, entryId, identityId, command) => {
         return { code: 403, message: "Access denied" };
     }
 
-    const effectiveConfig = await getEffectiveEntryConfig(entry);
+    const effectiveConfig = await applyEffectiveEntryConfig(entry);
     if (effectiveConfig.protocol !== "ssh") {
         return { code: 400, message: "Command execution is only supported for SSH entries" };
     }
@@ -37,8 +37,6 @@ const execCommand = async (accountId, entryId, identityId, command) => {
         return { code: 400, message: "No identity available for this entry" };
     }
 
-    entry.config = effectiveConfig;
-
     const credentials = await getIdentityCredentials(identity.id);
     const params = buildSSHParams(identity, credentials);
     const host = entry.config?.ip;
@@ -48,7 +46,7 @@ const execCommand = async (accountId, entryId, identityId, command) => {
         return { code: 400, message: "Missing host configuration" };
     }
 
-    const jumpHosts = await resolveJumpHosts(entry);
+    const jumpHosts = await resolveJumpHosts(entry, accountId);
     const execResult = await controlPlane.execCommand(host, port, params, command, jumpHosts);
 
     return {

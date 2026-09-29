@@ -80,7 +80,7 @@ module.exports.getAllServersMonitoring = async (accountId) => {
     try {
         const entries = await Entry.findAll({ where: { type: "server" } });
         const accessChecks = await Promise.all(entries.map(async (entry) => ({ item: entry, valid: (await validateEntryAccess(accountId, entry)).valid, config: await getEffectiveEntryConfig(entry) })));
-        const accessibleEntries = accessChecks.filter(({ valid, config }) => valid && config.monitoringEnabled && config.protocol === "ssh").map(({ item, config }) => ({ ...item.toJSON(), config }));
+        const accessibleEntries = accessChecks.filter(({ valid, config }) => valid && config.monitoringEnabled && config.protocol === "ssh").map(({ item, config }) => ({ ...toJson(item), config }));
 
         const integrations = await Integration.findAll({ where: { type: "proxmox" } });
         const intAccessChecks = await Promise.all(integrations.map(i => validateIntegrationAccess(accountId, i).then(r => ({ item: i, valid: r.valid }))));
