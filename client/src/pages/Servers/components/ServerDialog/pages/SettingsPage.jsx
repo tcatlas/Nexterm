@@ -66,9 +66,9 @@ const KEYBOARD_LAYOUTS = [
     { label: "Turkish (Qwerty)", value: "tr-tr-qwerty" }
 ];
 
-const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabled, fieldConfig, editServerId, overrides = [], onReset, inheritedConfig = {} }) => {
+const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabled, fieldConfig, editServerId, overrides = [], onReset, inheritedConfig = {}, restrictJumpHostsToScope = false, jumpHostOrganizationId = null, excludedJumpHostIds }) => {
     const { t } = useTranslation();
-    const Override = ({ field }) => <>{Object.hasOwn(inheritedConfig, field) && !overrides.includes(field) && <span className="inherited-setting-marker" />}{overrides.includes(field) && <button type="button" className="inheritance-override" onClick={() => onReset(field)} title="Use inherited value"><Icon path={mdiContentDuplicate} size={0.65} /></button>}</>;
+    const renderOverride = (field) => <>{Object.hasOwn(inheritedConfig, field) && !overrides.includes(field) && <span className="inherited-setting-marker" />}{overrides.includes(field) && <button type="button" className="inheritance-override" onClick={() => onReset(field)} title="Use inherited value"><Icon path={mdiContentDuplicate} size={0.65} /></button>}</>;
     const { servers } = useContext(ServerContext);
     const [keyboardLayout, setKeyboardLayout] = useState(config?.keyboardLayout || "en-us-qwerty");
     const [jumpHosts, setJumpHosts] = useState(config?.jumpHosts || []);
@@ -126,19 +126,26 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
         if (!servers) return;
 
         const sshServers = [];
-        const collectSSHServers = (entries) => {
+        const collectSSHServers = (entries, inheritedOrganizationId = null) => {
             entries.forEach(entry => {
+                const entryOrganizationId = entry.type === 'organization'
+                    ? Number(String(entry.id).replace('org-', ''))
+                    : entry.organizationId ?? inheritedOrganizationId;
                 if (entry.type === 'folder' || entry.type === 'organization') {
-                    collectSSHServers(entry.entries || []);
+                    collectSSHServers(entry.entries || [], entryOrganizationId);
                 } else if (entry.type === 'server' && entry.protocol === 'ssh' && entry.id !== editServerId) {
-                    sshServers.push(entry);
+                    const sameScope = !restrictJumpHostsToScope
+                        || (jumpHostOrganizationId
+                            ? entryOrganizationId === jumpHostOrganizationId
+                            : !entryOrganizationId);
+                    if (sameScope && !excludedJumpHostIds?.includes(entry.id)) sshServers.push(entry);
                 }
             });
         };
         
         collectSSHServers(servers);
         setAvailableJumpHosts(sshServers);
-    }, [servers, editServerId]);
+    }, [servers, editServerId, restrictJumpHostsToScope, jumpHostOrganizationId, excludedJumpHostIds]);
 
     const handleJumpHostsChange = (newJumpHosts) => {
         setJumpHosts(newJumpHosts);
@@ -181,7 +188,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
                         <div className="jump-hosts-info">
                             <span className="jump-hosts-label">
                                 <Icon path={mdiServerNetwork} size={0.8} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
-                                {t("servers.dialog.settings.jumpHosts.title")}<Override field="jumpHosts" />
+                                {t("servers.dialog.settings.jumpHosts.title")}{renderOverride("jumpHosts")}
                             </span>
                             <span className="jump-hosts-description">
                                 {t('servers.dialog.settings.jumpHosts.description')}
@@ -242,7 +249,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
                     <div className="settings-toggle-info">
                         <span className="settings-toggle-label">
                             <Icon path={mdiChartLine} size={0.8} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
-                            {t("servers.dialog.settings.monitoring.title")}<Override field="monitoringEnabled" />
+                            {t("servers.dialog.settings.monitoring.title")}{renderOverride("monitoringEnabled")}
                         </span>
                         <span className="settings-toggle-description">
                             {t('servers.dialog.settings.monitoring.description')}
@@ -257,7 +264,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
                     <div className="settings-toggle-info">
                         <span className="settings-toggle-label">
                             <Icon path={mdiPowerPlug} size={0.8} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
-                            {t("servers.dialog.settings.wakeOnLan.title")}<Override field="wakeOnLanEnabled" />
+                            {t("servers.dialog.settings.wakeOnLan.title")}{renderOverride("wakeOnLanEnabled")}
                         </span>
                         <span className="settings-toggle-description">
                             {t('servers.dialog.settings.wakeOnLan.description')}
@@ -283,7 +290,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
 
                     <div className="terminal-settings-grid">
                         <div className="form-group">
-                            <label>{t("servers.dialog.settings.terminal.backspace")}<Override field="backspaceMode" /></label>
+                            <label>{t("servers.dialog.settings.terminal.backspace")}{renderOverride("backspaceMode")}</label>
                             <SelectBox 
                                 options={BACKSPACE_MODES} 
                                 selected={backspaceMode} 
@@ -291,7 +298,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
                             />
                         </div>
                         <div className="form-group">
-                            <label>{t("servers.dialog.settings.terminal.delete")}<Override field="deleteMode" /></label>
+                            <label>{t("servers.dialog.settings.terminal.delete")}{renderOverride("deleteMode")}</label>
                             <SelectBox 
                                 options={DELETE_MODES} 
                                 selected={deleteMode} 
@@ -299,7 +306,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
                             />
                         </div>
                         <div className="form-group">
-                            <label>{t("servers.dialog.settings.terminal.functionKeys")}<Override field="functionKeyMode" /></label>
+                            <label>{t("servers.dialog.settings.terminal.functionKeys")}{renderOverride("functionKeyMode")}</label>
                             <SelectBox 
                                 options={FUNCTION_KEY_MODES} 
                                 selected={functionKeyMode} 
@@ -324,7 +331,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
                         </div>
                     </div>
                     <div className="form-group">
-                        <label>{t("servers.dialog.settings.rdpSecurity.method")}<Override field="rdpSecurity" /></label>
+                        <label>{t("servers.dialog.settings.rdpSecurity.method")}{renderOverride("rdpSecurity")}</label>
                         <SelectBox
                             options={RDP_SECURITY_METHODS}
                             selected={rdpSecurity}
@@ -337,7 +344,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
             {fieldConfig.showKeyboardLayout && (
                 <div className="keyboard-layout-card">
                     <div className="form-group">
-                        <label>{t("servers.dialog.settings.keyboardLayout.title")}<Override field="keyboardLayout" /></label>
+                        <label>{t("servers.dialog.settings.keyboardLayout.title")}{renderOverride("keyboardLayout")}</label>
                         <SelectBox options={KEYBOARD_LAYOUTS} selected={keyboardLayout} setSelected={handleKeyboardLayoutChange} />
                         <p className="keyboard-layout-description">{t('servers.dialog.settings.keyboardLayout.description')}</p>
                     </div>
@@ -359,7 +366,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
                     </div>
 
                     <div className="form-group">
-                        <label>{t("servers.dialog.settings.display.colorDepth")}<Override field="colorDepth" /></label>
+                        <label>{t("servers.dialog.settings.display.colorDepth")}{renderOverride("colorDepth")}</label>
                         <SelectBox 
                             options={COLOR_DEPTHS} 
                             selected={colorDepth} 
@@ -368,7 +375,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
                     </div>
 
                     <div className="form-group">
-                        <label>{t("servers.dialog.settings.display.resizeMethod")}<Override field="resizeMethod" /></label>
+                        <label>{t("servers.dialog.settings.display.resizeMethod")}{renderOverride("resizeMethod")}</label>
                         <SelectBox 
                             options={RESIZE_METHODS} 
                             selected={resizeMethod} 
@@ -383,7 +390,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
                     <div className="settings-toggle-info">
                         <span className="settings-toggle-label">
                             <Icon path={mdiVolumeHigh} size={0.8} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
-                            {t("servers.dialog.settings.audio.enableAudio")}<Override field="enableAudio" />
+                            {t("servers.dialog.settings.audio.enableAudio")}{renderOverride("enableAudio")}
                         </span>
                         <span className="settings-toggle-description">{t('servers.dialog.settings.audio.enableAudioDesc')}</span>
                     </div>
@@ -407,7 +414,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
 
                     <div className="settings-toggle">
                         <div className="settings-toggle-info">
-                            <span className="settings-toggle-label">{t("servers.dialog.settings.performance.enableWallpaper")}<Override field="enableWallpaper" /></span>
+                            <span className="settings-toggle-label">{t("servers.dialog.settings.performance.enableWallpaper")}{renderOverride("enableWallpaper")}</span>
                             <span className="settings-toggle-description">{t('servers.dialog.settings.performance.enableWallpaperDesc')}</span>
                         </div>
                         <ToggleSwitch checked={enableWallpaper} onChange={(val) => handleDisplaySettingChange('enableWallpaper', val, setEnableWallpaper)} id="enable-wallpaper" />
@@ -415,7 +422,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
 
                     <div className="settings-toggle">
                         <div className="settings-toggle-info">
-                            <span className="settings-toggle-label">{t("servers.dialog.settings.performance.enableTheming")}<Override field="enableTheming" /></span>
+                            <span className="settings-toggle-label">{t("servers.dialog.settings.performance.enableTheming")}{renderOverride("enableTheming")}</span>
                             <span className="settings-toggle-description">{t('servers.dialog.settings.performance.enableThemingDesc')}</span>
                         </div>
                         <ToggleSwitch checked={enableTheming} onChange={(val) => handleDisplaySettingChange('enableTheming', val, setEnableTheming)} id="enable-theming" />
@@ -423,7 +430,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
 
                     <div className="settings-toggle">
                         <div className="settings-toggle-info">
-                            <span className="settings-toggle-label">{t("servers.dialog.settings.performance.enableFontSmoothing")}<Override field="enableFontSmoothing" /></span>
+                            <span className="settings-toggle-label">{t("servers.dialog.settings.performance.enableFontSmoothing")}{renderOverride("enableFontSmoothing")}</span>
                             <span className="settings-toggle-description">{t('servers.dialog.settings.performance.enableFontSmoothingDesc')}</span>
                         </div>
                         <ToggleSwitch checked={enableFontSmoothing} onChange={(val) => handleDisplaySettingChange('enableFontSmoothing', val, setEnableFontSmoothing)} id="enable-font-smoothing" />
@@ -431,7 +438,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
 
                     <div className="settings-toggle">
                         <div className="settings-toggle-info">
-                            <span className="settings-toggle-label">{t("servers.dialog.settings.performance.enableFullWindowDrag")}<Override field="enableFullWindowDrag" /></span>
+                            <span className="settings-toggle-label">{t("servers.dialog.settings.performance.enableFullWindowDrag")}{renderOverride("enableFullWindowDrag")}</span>
                             <span className="settings-toggle-description">{t('servers.dialog.settings.performance.enableFullWindowDragDesc')}</span>
                         </div>
                         <ToggleSwitch checked={enableFullWindowDrag} onChange={(val) => handleDisplaySettingChange('enableFullWindowDrag', val, setEnableFullWindowDrag)} id="enable-full-window-drag" />
@@ -439,7 +446,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
 
                     <div className="settings-toggle">
                         <div className="settings-toggle-info">
-                            <span className="settings-toggle-label">{t("servers.dialog.settings.performance.enableDesktopComposition")}<Override field="enableDesktopComposition" /></span>
+                            <span className="settings-toggle-label">{t("servers.dialog.settings.performance.enableDesktopComposition")}{renderOverride("enableDesktopComposition")}</span>
                             <span className="settings-toggle-description">{t('servers.dialog.settings.performance.enableDesktopCompositionDesc')}</span>
                         </div>
                         <ToggleSwitch checked={enableDesktopComposition} onChange={(val) => handleDisplaySettingChange('enableDesktopComposition', val, setEnableDesktopComposition)} id="enable-desktop-composition" />
@@ -447,7 +454,7 @@ const SettingsPage = ({ config, setConfig, monitoringEnabled, setMonitoringEnabl
 
                     <div className="settings-toggle">
                         <div className="settings-toggle-info">
-                            <span className="settings-toggle-label">{t("servers.dialog.settings.performance.enableMenuAnimations")}<Override field="enableMenuAnimations" /></span>
+                            <span className="settings-toggle-label">{t("servers.dialog.settings.performance.enableMenuAnimations")}{renderOverride("enableMenuAnimations")}</span>
                             <span className="settings-toggle-description">{t('servers.dialog.settings.performance.enableMenuAnimationsDesc')}</span>
                         </div>
                         <ToggleSwitch checked={enableMenuAnimations} onChange={(val) => handleDisplaySettingChange('enableMenuAnimations', val, setEnableMenuAnimations)} id="enable-menu-animations" />

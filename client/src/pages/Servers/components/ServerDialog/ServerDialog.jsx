@@ -37,16 +37,23 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
     const [inheritedIdentities, setInheritedIdentities] = useState([]);
     const [monitoringEnabled, setMonitoringEnabled] = useState(false);
     const [entryType, setEntryType] = useState("server");
+    const [localOverrideKeys, setLocalOverrideKeys] = useState([]);
 
     const [identityUpdates, setIdentityUpdates] = useState({});
 
     const [activeTab, setActiveTab] = useState(0);
     
-    const initialValues = useRef({ name: '', icon: null, config: {}, identities: '[]', monitoringEnabled: false });
+    const initialValues = useRef({ name: '', icon: null, config: {}, identities: '[]', monitoringEnabled: false, localOverrideKeys: '[]' });
 
     const fieldConfig = getFieldConfig(entryType, config.protocol);
     const tabs = getAvailableTabs(entryType, config.protocol);
-    const overrides = useMemo(() => Object.keys(config).filter((key) => key !== "protocol" && JSON.stringify(config[key]) !== JSON.stringify(inheritedConfig[key])), [config, inheritedConfig]);
+    const explicitOverrideKeys = useMemo(() => new Set(localOverrideKeys), [localOverrideKeys]);
+    const overrides = useMemo(() => Object.keys(config).filter((key) =>
+        key !== "protocol"
+        && Object.hasOwn(inheritedConfig, key)
+        && (explicitOverrideKeys.has(key)
+            || JSON.stringify(config[key]) !== JSON.stringify(inheritedConfig[key]))
+    ), [config, inheritedConfig, explicitOverrideKeys]);
 
     const normalizeIdentity = (identity) => {
         const normalized = { ...identity };
@@ -157,6 +164,7 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
 
     const resetOverride = useCallback((key) => {
         const value = inheritedConfig[key];
+        setLocalOverrideKeys((current) => current.filter((overrideKey) => overrideKey !== key));
         setConfig((current) => {
             const next = { ...current };
             if (Object.hasOwn(inheritedConfig, key)) next[key] = value;
@@ -167,7 +175,9 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
     }, [inheritedConfig]);
 
     const buildLocalConfig = () => Object.fromEntries(
-        Object.entries(buildConfig()).filter(([key, value]) => key === "protocol" || JSON.stringify(value) !== JSON.stringify(inheritedConfig[key]))
+        Object.entries(buildConfig()).filter(([key, value]) => key === "protocol"
+            || explicitOverrideKeys.has(key)
+            || JSON.stringify(value) !== JSON.stringify(inheritedConfig[key]))
     );
 
     const serverIdentities = useMemo(() => [...identities, ...inheritedIdentities.filter((identityId) => !identities.includes(identityId))], [identities, inheritedIdentities]);
@@ -234,6 +244,8 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
         if (editServerId) {
             getRequest("entries/" + editServerId).then((server) => {
                 setName(server.name);
+                const savedOverrideKeys = Object.keys(server.localConfig || {}).filter((key) => key !== "protocol");
+                setLocalOverrideKeys(savedOverrideKeys);
                 setIcon(server.icon || null);
                 setIdentities(server.localIdentities || []);
                 setEntryType(server.type || "server");
@@ -248,10 +260,12 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
                     icon: server.icon || null,
                     config: JSON.stringify(parsedConfig),
                     identities: JSON.stringify(server.localIdentities || []),
-                    monitoringEnabled: Boolean(parsedConfig.monitoringEnabled ?? true)
+                    monitoringEnabled: Boolean(parsedConfig.monitoringEnabled ?? true),
+                    localOverrideKeys: JSON.stringify(savedOverrideKeys),
                 };
             });
         } else {
+            setLocalOverrideKeys([]);
             setName("");
             setIcon(null);
             setIdentities([]);
@@ -275,11 +289,12 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
                     icon: defaultIcon, 
                     config: JSON.stringify(initialConfig), 
                     identities: '[]',
-                    monitoringEnabled: false 
+                    monitoringEnabled: false,
+                    localOverrideKeys: '[]',
                 };
             } else {
                 setConfig({});
-                initialValues.current = { name: '', icon: null, config: '{}', identities: '[]', monitoringEnabled: false };
+                initialValues.current = { name: '', icon: null, config: '{}', identities: '[]', monitoringEnabled: false, localOverrideKeys: '[]' };
             }
             setMonitoringEnabled(false);
 
@@ -332,6 +347,7 @@ export const ServerDialog = ({ open, onClose, currentFolderId, currentOrganizati
                      JSON.stringify(config) !== initialValues.current.config ||
                      JSON.stringify(identities) !== initialValues.current.identities ||
                      monitoringEnabled !== initialValues.current.monitoringEnabled ||
+                     JSON.stringify(localOverrideKeys) !== initialValues.current.localOverrideKeys ||
                      Object.keys(identityUpdates).length > 0;
 
     const tabSwitcherTabs = useMemo(() => tabs.map((tab, index) => ({
